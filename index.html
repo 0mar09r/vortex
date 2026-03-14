@@ -2,58 +2,95 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>VORTEX Host</title>
+    <title>VORTEX - Host Arena</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700&display=swap');
-        body { background: #0f172a; color: white; font-family: 'Tajawal', sans-serif; text-align: center; }
-        .header { font-size: 50px; color: #facc15; margin: 20px; text-shadow: 0 0 15px gold; }
-        .timer { font-size: 80px; color: #ef4444; }
-        .btn { padding: 15px 30px; font-size: 20px; background: #16a34a; color: white; border: none; border-radius: 10px; cursor: pointer; }
-        .score-board { margin: 20px auto; max-width: 400px; background: #1e293b; padding: 15px; border-radius: 15px; }
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+        body { background: radial-gradient(circle, #1e293b, #0f172a); font-family: 'Tajawal', sans-serif; color: white; text-align: center; margin: 0; overflow: hidden; }
+        .vortex-header { font-size: 60px; font-weight: bold; color: #facc15; text-shadow: 0 0 20px rgba(250, 204, 21, 0.6); margin: 20px 0; }
+        .btn { display: inline-block; width: 200px; margin: 10px; padding: 15px; border-radius: 15px; border: none; font-size: 18px; font-weight: bold; color: white; cursor: pointer; transition: 0.3s; background: linear-gradient(135deg, #16a34a, #15803d); }
+        .scoreboard { max-width: 500px; margin: 20px auto; background: rgba(30, 41, 59, 0.9); padding: 15px; border-radius: 20px; border: 1px solid #475569; }
+        .score-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #334155; align-items: center; }
+        .timer { font-size: 80px; color: #facc15; margin: 10px 0; }
+        .frozen-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 191, 255, 0.3); backdrop-filter: blur(8px); display: none; z-index: 999; }
     </style>
 </head>
 <body>
-    <div class="header">VORTEX</div>
-    <div id="roomCode">كود الغرفة: ----</div>
-    <h1 id="question">اضغط "بدء الساحة"</h1>
-    <div class="timer" id="timeLeft">15</div>
-    <div id="winner" style="font-size: 30px; color: #38bdf8;"></div>
-    <div id="scores" class="score-board"></div>
-    <button onclick="initGame()" class="btn">بدء الساحة</button>
-    <button onclick="nextQuestion()" class="btn" style="background:#2563eb">السؤال التالي</button>
+    <div id="frozenUI" class="frozen-overlay"><h1>❄️ تجميد نشط ❄️</h1></div>
+    <div class="vortex-header">VORTEX</div>
+    <button onclick="startVortex()" class="btn">فتح الساحة</button>
+    <h2>كود الدخول: <span id="rc" style="color:#facc15">----</span></h2>
+    <h3 id="qc" style="color:#38bdf8">التصنيف</h3>
+    <h1 id="qt" style="min-height: 100px; padding: 0 20px;">جاهز؟</h1>
+    <h2 id="win" style="color:#ef4444; font-size: 40px;"></h2>
+    <div class="timer" id="tm">15</div>
+    <div id="sb" class="scoreboard"></div>
+    <button onclick="nextQ()" class="btn" style="background:#2563eb">السؤال التالي ⏭️</button>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+        import { getDatabase, ref, set, update, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-        // اترك هذا فارغاً، سأقوم بتعبئته لاحقاً
-        const firebaseConfig = { apiKey: "", databaseURL: "", projectId: "" };
+        // ضع بيانات Firebase هنا
+        const firebaseConfig = { apiKey: "YOUR_API", databaseURL: "YOUR_URL", projectId: "YOUR_ID" };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        let currentRoom = "";
+        let room = ""; let timerInt;
 
-        const questions = [
-            {q: "أطول نهر في العالم؟", a: "النيل"}, {q: "أكمل: القرد في عين أمه؟", a: "غزال"},
-            {q: "سورة لا تبدأ بالبسملة؟", a: "التوبة"}, {q: "أكبر كوكب؟", a: "المشتري"}
-            // (سيتم إضافة البقية برمجياً)
+        const bank = [
+            {q:"سورة لا تبدأ بالبسملة؟", a:"التوبة", cat:"ديني"},
+            {q:"أطول نهر في العالم؟", a:"النيل", cat:"جغرافيا"},
+            {q:"أكمل: القرد في عين أمه؟", a:"غزال", cat:"أمثال"},
+            {q:"شيء يكسو الناس وهو عارٍ؟", a:"الإبرة", cat:"ألغاز"},
+            {q:"ما هي عاصمة اليابان؟", a:"طوكيو", cat:"معلومات"},
+            {q:"من هو أول مؤذن في الإسلام؟", a:"بلال بن رباح", cat:"ديني"},
+            {q:"أكبر كوكب؟", a:"المشتري", cat:"علوم"},
+            {q:"أصغر دولة في العالم؟", a:"الفاتيكان", cat:"جغرافيا"},
+            {q:"ما هو الشيء الذي كلما زاد نقص؟", a:"العمر", cat:"ألغاز"},
+            {q:"كم عدد أجزاء القرآن؟", a:"30 جزء", cat:"ديني"}
         ];
 
-        window.initGame = () => {
-            currentRoom = Math.random().toString(36).substring(7).toUpperCase();
-            document.getElementById('rc').innerText = currentRoom;
-            set(ref(db, 'rooms/' + currentRoom), { qi: 0, timer: 15, buzzer: "" });
-            listenToRoom();
+        window.startVortex = async () => {
+            room = Math.random().toString(36).substring(2,6).toUpperCase();
+            document.getElementById("rc").innerText = room;
+            await set(ref(db, "rooms/" + room), { qi: 0, buzzer: "", timer: 15, powerUp: null });
+            listen();
         };
 
-        function listenToRoom() {
-            onValue(ref(db, 'rooms/' + currentRoom), (snapshot) => {
-                const data = snapshot.val();
-                if(!data) return;
-                document.getElementById('question').innerText = questions[data.qi].q;
-                document.getElementById('timeLeft').innerText = data.timer;
-                document.getElementById('winner').innerText = data.buzzer ? "أسرع ضغطة: " + data.buzzer : "";
+        function listen() {
+            onValue(ref(db, "rooms/" + room), (snap) => {
+                const d = snap.val(); if(!d) return;
+                const q = bank[d.qi];
+                document.getElementById("qt").innerText = q.q;
+                document.getElementById("qc").innerText = q.cat;
+                document.getElementById("tm").innerText = d.timer;
+                document.getElementById("win").innerText = d.buzzer ? "🔔 " + d.buzzer : "";
+                document.getElementById("frozenUI").style.display = d.powerUp?.type === "freeze" ? "block" : "none";
+                const sb = document.getElementById("sb"); sb.innerHTML = "";
+                if(d.players) {
+                    for(let p in d.players) {
+                        sb.innerHTML += `<div class="score-item"><span>${p} (💰${d.players[p].coins})</span>
+                        <button onclick="mod('${p}',10)" style="background:green;color:white;border:none;padding:5px;">+10</button></div>`;
+                    }
+                }
             });
         }
+
+        window.mod = async (p, a) => {
+            const s = await get(ref(db, `rooms/${room}/players/${p}`));
+            update(ref(db, `rooms/${room}/players/${p}`), { coins: (s.val().coins || 0) + a });
+        };
+
+        window.nextQ = () => {
+            const ni = Math.floor(Math.random() * bank.length);
+            update(ref(db, "rooms/" + room), { qi: ni, buzzer: "", timer: 15, powerUp: null });
+            clearInterval(timerInt);
+            timerInt = setInterval(async () => {
+                const s = await get(ref(db, `rooms/${room}/timer`));
+                const val = s.val();
+                if(val > 0) update(ref(db, `rooms/${room}`), { timer: val - 1 });
+                else clearInterval(timerInt);
+            }, 1000);
+        };
     </script>
 </body>
 </html>
