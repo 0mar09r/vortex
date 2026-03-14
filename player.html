@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VORTEX - Player</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@700&display=swap');
+        body { background: #0f172a; color: white; text-align: center; font-family: 'Tajawal', sans-serif; margin: 0; }
+        .buzzer { background: radial-gradient(#ef4444, #991b1b); width: 200px; height: 200px; border-radius: 50%; border: 8px solid #450a0a; font-size: 60px; color: white; box-shadow: 0 10px 0 #450a0a; cursor: pointer; margin: 40px auto; display: flex; align-items: center; justify-content: center; user-select: none; }
+        .buzzer:active { transform: translateY(5px); box-shadow: 0 2px 0 #450a0a; }
+        .btn-shop { background: #0ea5e9; padding: 15px; border-radius: 12px; border: none; color: white; font-weight: bold; width: 85%; margin: 10px 0; }
+        input { padding: 15px; border-radius: 10px; border: none; margin: 5px; width: 80%; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div id="joinArea">
+        <h1 style="color:#facc15; margin-top:50px;">VORTEX</h1>
+        <input id="pn" placeholder="اسمك">
+        <input id="rc" placeholder="كود الغرفة">
+        <button onclick="join()" class="btn-shop" style="background:#16a34a">دخول ✅</button>
+    </div>
+
+    <div id="playArea" style="display:none">
+        <h2>💰 الرصيد: <span id="cVal">0</span></h2>
+        <button onclick="buy('freeze', 40)" class="btn-shop">❄️ تجميد الجميع (40)</button>
+        <div class="buzzer" onclick="buzz()">🔔</div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getDatabase, ref, update, get, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+        const firebaseConfig = { apiKey: "YOUR_API", databaseURL: "YOUR_URL", projectId: "YOUR_ID" };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        let r = ""; let p = ""; let coins = 0;
+
+        window.join = async () => {
+            p = document.getElementById("pn").value.trim();
+            r = document.getElementById("rc").value.trim().toUpperCase();
+            if(!p || !r) return;
+            await update(ref(db, `rooms/${r}/players/${p}`), { coins: 50 });
+            document.getElementById("joinArea").style.display = "none";
+            document.getElementById("playArea").style.display = "block";
+            onValue(ref(db, `rooms/${r}/players/${p}/coins`), s => {
+                coins = s.val() || 0;
+                document.getElementById("cVal").innerText = coins;
+            });
+        };
+
+        window.buy = async (t, c) => {
+            if(coins < c) return alert("لا يوجد رصيد!");
+            update(ref(db, `rooms/${r}/players/${p}`), { coins: coins - c });
+            update(ref(db, `rooms/${r}/powerUp`), { type: t, by: p });
+        };
+
+        window.buzz = async () => {
+            const s = await get(ref(db, `rooms/${r}`));
+            const d = s.val();
+            if(d.powerUp?.type === "freeze" && d.powerUp.by !== p) return;
+            if(!d.buzzer && d.timer > 0) update(ref(db, `rooms/${r}`), { buzzer: p });
+        };
+    </script>
+</body>
+</html>
